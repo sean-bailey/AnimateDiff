@@ -1,4 +1,6 @@
 # Adapted from https://github.com/showlab/Tune-A-Video/blob/main/tuneavideo/pipelines/pipeline_tuneavideo.py
+import torchvision.transforms as T
+from PIL import Image
 
 import inspect
 from typing import Callable, List, Optional, Union
@@ -283,18 +285,33 @@ class AnimationPipeline(DiffusionPipeline):
                 f" {type(callback_steps)}."
             )
 
-    def prepare_latents(self, batch_size, num_channels_latents, video_length, height, width, dtype, device, generator, latents=None):
+    def preprocess_start_frame(self, start_frame, device):
+        transform = T.Compose([
+            T.Resize((self.unet.config.sample_size * self.vae_scale_factor, self.unet.config.sample_size * self.vae_scale_factor)),
+            T.ToTensor(),
+            T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+        ])
+        frame = transform(start_frame).unsqueeze(0).to(device)
+        return frame
+
+    def prepare_latents(self, batch_size, num_channels_latents, video_length, height, width, dtype, device, generator, latents=None, start_frame=None):
         shape = (batch_size, num_channels_latents, video_length, height // self.vae_scale_factor, width // self.vae_scale_factor)
-        if isinstance(generator, list) and len(generator) != batch_size:
-            raise ValueError(
-                f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
-                f" size of {batch_size}. Make sure the batch size matches the length of the generators."
-            )
-        if latents is None:
+
+        if start_frame is not None:
+            # Preprocess and encode the start frame
+            preprocessed_frame = self.preprocess_start_frame(start_frame, device)
+            encoded_latent = self.vae.encode(preprocessed_frame).latent_dist.sample().to(dtype)
+            latents = encoded_latent.repeat(1, 1, video_length, 1, 1)
+        elif latents is None:
+            # Handle random latent generation as per the original code
             rand_device = "cpu" if device.type == "mps" else device
 
             if isinstance(generator, list):
-                shape = shape
+                if len(generator) != batch_size:
+                    raise ValueError(
+                        f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
+                        f" size of {batch_size}. Make sure the batch size matches the length of the generators."
+                    )
                 # shape = (1,) + shape[1:]
                 latents = [
                     torch.randn(shape, generator=generator[i], device=rand_device, dtype=dtype)
@@ -311,6 +328,7 @@ class AnimationPipeline(DiffusionPipeline):
         # scale the initial noise by the standard deviation required by the scheduler
         latents = latents * self.scheduler.init_noise_sigma
         return latents
+
 
     @torch.no_grad()
     def __call__(
@@ -330,6 +348,7 @@ class AnimationPipeline(DiffusionPipeline):
         return_dict: bool = True,
         callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
         callback_steps: Optional[int] = 1,
+        start_frame: Optional[Image.Image] = None,
         **kwargs,
     ):
         # Default height and width to unet
@@ -377,6 +396,7 @@ class AnimationPipeline(DiffusionPipeline):
             device,
             generator,
             latents,
+            start_frame=start_frame,
         )
         latents_dtype = latents.dtype
 
