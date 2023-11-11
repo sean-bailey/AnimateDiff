@@ -286,6 +286,7 @@ class AnimationPipeline(DiffusionPipeline):
             )
 
     def preprocess_start_frame(self, start_frame, device):
+        start_frame=start_frame.convert("RGB")
         transform = T.Compose([
             T.Resize((self.unet.config.sample_size * self.vae_scale_factor, self.unet.config.sample_size * self.vae_scale_factor)),
             T.ToTensor(),
