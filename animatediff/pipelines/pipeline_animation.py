@@ -295,6 +295,28 @@ class AnimationPipeline(DiffusionPipeline):
         frame = transform(start_frame).unsqueeze(0).to(device)
         return frame
 
+    def adjust_input_channels(input_tensor, unet_model, device):
+        # Check the number of channels in the input tensor
+        input_channels = input_tensor.shape[1]
+
+        # Assuming the first convolutional layer of the U-Net is named 'conv1'
+        expected_channels = unet_model.conv1.weight.shape[1]
+
+        # Adjust the tensor to match the expected number of channels
+        if input_channels < expected_channels:
+            # Add additional channels (filled with zeros)
+            additional_channels = torch.zeros(input_tensor.shape[0], expected_channels - input_channels, *input_tensor.shape[2:]).to(device)
+            adjusted_tensor = torch.cat([input_tensor, additional_channels], dim=1)
+        elif input_channels > expected_channels:
+            # Slice the tensor to match the expected number of channels
+            adjusted_tensor = input_tensor[:, :expected_channels, ...]
+        else:
+            # No adjustment needed
+            adjusted_tensor = input_tensor
+
+        return adjusted_tensor
+
+
     def prepare_latents(self, batch_size, num_channels_latents, video_length, height, width, dtype, device, generator, latents=None, start_frame=None):
         shape = (batch_size, num_channels_latents, video_length, height // self.vae_scale_factor, width // self.vae_scale_factor)
 
@@ -411,7 +433,8 @@ class AnimationPipeline(DiffusionPipeline):
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
+                # Adjust the input channels to match U-Net's expectations
+                latent_model_input = self.adjust_input_channels(latent_model_input, self.unet, device)
                 # predict the noise residual
                 noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample.to(dtype=latents_dtype)
                 # noise_pred = []
