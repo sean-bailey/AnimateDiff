@@ -295,7 +295,7 @@ class AnimationPipeline(DiffusionPipeline):
         frame = transform(start_frame).unsqueeze(0).to(device)
         return frame
 
-    def adjust_input_channels(input_tensor, unet_model, device):
+    def adjust_input_channels(self, input_tensor, unet_model, device):
         # Check the number of channels in the input tensor
         input_channels = input_tensor.shape[1]
 
