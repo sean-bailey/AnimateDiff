@@ -294,13 +294,29 @@ class AnimationPipeline(DiffusionPipeline):
         ])
         frame = transform(start_frame).unsqueeze(0).to(device)
         return frame
+    
+    
+    def find_first_conv_layer(self, model):
+        for name, module in model.named_modules():
+            if isinstance(module, (torch.nn.Conv2d, torch.nn.Conv3d)):
+                return name, module
+        return None, None
 
     def adjust_input_channels(self, input_tensor, unet_model, device):
+        
+        # Find the first convolutional layer in the U-Net model
+        layer_name, conv_layer = self.find_first_conv_layer(unet_model)
+
+        if conv_layer is None:
+            raise ValueError("No convolutional layer found in the U-Net model")
+
+
         # Check the number of channels in the input tensor
         input_channels = input_tensor.shape[1]
 
         # Assuming the first convolutional layer of the U-Net is named 'conv1'
-        expected_channels = unet_model.conv1.weight.shape[1]
+        #expected_channels = unet_model.conv1.weight.shape[1]
+        expected_channels = conv_layer.weight.shape[1]
 
         # Adjust the tensor to match the expected number of channels
         if input_channels < expected_channels:
