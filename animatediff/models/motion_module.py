@@ -233,6 +233,11 @@ class PositionalEncoding(nn.Module):
     ):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
+        self.d_model = d_model
+        self.max_len = max_len
+        self._generate_positional_encoding(d_model, max_len)
+
+    def _generate_positional_encoding(self, d_model, max_len):
         position = torch.arange(max_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
         pe = torch.zeros(1, max_len, d_model)
@@ -241,8 +246,13 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        x = x + self.pe[:, :x.size(1)]
+        current_max_len = x.size(1)
+        if current_max_len > self.pe.size(1):
+            # Extend the positional encoding if needed
+            self._generate_positional_encoding(self.d_model, current_max_len)
+        x = x + self.pe[:, :current_max_len]
         return self.dropout(x)
+
 
 
 class VersatileAttention(CrossAttention):
