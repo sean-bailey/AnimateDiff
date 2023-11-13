@@ -1,6 +1,7 @@
 # Adapted from https://github.com/showlab/Tune-A-Video/blob/main/tuneavideo/pipelines/pipeline_tuneavideo.py
 import torchvision.transforms as T
 from PIL import Image
+from torch.cuda.amp import autocast
 
 import inspect
 from typing import Callable, List, Optional, Union
@@ -402,6 +403,8 @@ class AnimationPipeline(DiffusionPipeline):
         start_frame: Optional[Image.Image] = None,
         **kwargs,
     ):
+        # Convert model to FP16
+        self.unet.to(torch.float16)
         # Default height and width to unet
         height = height or self.unet.config.sample_size * self.vae_scale_factor
         width = width or self.unet.config.sample_size * self.vae_scale_factor
@@ -464,6 +467,10 @@ class AnimationPipeline(DiffusionPipeline):
                         torch.cuda.empty_cache()
                 except Exception as e:
                     print(e)
+                with autocast():
+                    # predict the noise residual in FP16
+                    noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample.to(dtype=latents_dtype)
+
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
