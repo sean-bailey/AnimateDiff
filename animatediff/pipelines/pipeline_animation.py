@@ -285,16 +285,28 @@ class AnimationPipeline(DiffusionPipeline):
                 f" {type(callback_steps)}."
             )
 
+    #def preprocess_start_frame(self, start_frame, device):
+    #    start_frame=start_frame.convert("RGB")
+    #    transform = T.Compose([
+    #        T.Resize((self.unet.config.sample_size * self.vae_scale_factor, self.unet.config.sample_size * self.vae_scale_factor)),
+    #        T.ToTensor(),
+    #        T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+    #    ])
+    #    frame = transform(start_frame).unsqueeze(0).to(device)
+    #    return frame
+    
     def preprocess_start_frame(self, start_frame, device):
-        start_frame=start_frame.convert("RGB")
+        # Reduce the resolution here if necessary
+        target_resolution = (self.unet.config.sample_size * self.vae_scale_factor, 
+                             self.unet.config.sample_size * self.vae_scale_factor)
         transform = T.Compose([
-            T.Resize((self.unet.config.sample_size * self.vae_scale_factor, self.unet.config.sample_size * self.vae_scale_factor)),
+            T.Resize(target_resolution),
             T.ToTensor(),
             T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
         ])
         frame = transform(start_frame).unsqueeze(0).to(device)
         return frame
-    
+
     
     def find_first_conv_layer(self, model):
         for name, module in model.named_modules():
