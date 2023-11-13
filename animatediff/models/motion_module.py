@@ -250,7 +250,11 @@ class PositionalEncoding(nn.Module):
         if current_max_len > self.pe.size(1):
             # Extend the positional encoding if needed
             self._generate_positional_encoding(self.d_model, current_max_len)
-        x = x + self.pe[:, :current_max_len]
+
+        # Move positional encoding to the same device as x
+        pe = self.pe.to(x.device)
+
+        x = x + pe[:, :current_max_len]
         return self.dropout(x)
 
 
