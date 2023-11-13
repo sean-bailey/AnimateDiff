@@ -1,7 +1,6 @@
 # Adapted from https://github.com/showlab/Tune-A-Video/blob/main/tuneavideo/pipelines/pipeline_tuneavideo.py
 import torchvision.transforms as T
 from PIL import Image
-from torch.cuda.amp import autocast
 
 import inspect
 from typing import Callable, List, Optional, Union
@@ -286,28 +285,16 @@ class AnimationPipeline(DiffusionPipeline):
                 f" {type(callback_steps)}."
             )
 
-    #def preprocess_start_frame(self, start_frame, device):
-    #    start_frame=start_frame.convert("RGB")
-    #    transform = T.Compose([
-    #        T.Resize((self.unet.config.sample_size * self.vae_scale_factor, self.unet.config.sample_size * self.vae_scale_factor)),
-    #        T.ToTensor(),
-    #        T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-    #    ])
-    #    frame = transform(start_frame).unsqueeze(0).to(device)
-    #    return frame
-    
     def preprocess_start_frame(self, start_frame, device):
-        # Reduce the resolution here if necessary
-        target_resolution = (self.unet.config.sample_size * self.vae_scale_factor, 
-                             self.unet.config.sample_size * self.vae_scale_factor)
+        start_frame=start_frame.convert("RGB")
         transform = T.Compose([
-            T.Resize(target_resolution),
+            T.Resize((self.unet.config.sample_size * self.vae_scale_factor, self.unet.config.sample_size * self.vae_scale_factor)),
             T.ToTensor(),
             T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
         ])
         frame = transform(start_frame).unsqueeze(0).to(device)
         return frame
-
+    
     
     def find_first_conv_layer(self, model):
         for name, module in model.named_modules():
@@ -403,8 +390,6 @@ class AnimationPipeline(DiffusionPipeline):
         start_frame: Optional[Image.Image] = None,
         **kwargs,
     ):
-        # Convert model to FP16
-        self.unet.to(torch.float16)
         # Default height and width to unet
         height = height or self.unet.config.sample_size * self.vae_scale_factor
         width = width or self.unet.config.sample_size * self.vae_scale_factor
@@ -461,16 +446,6 @@ class AnimationPipeline(DiffusionPipeline):
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
-                try:
-                    # Clear the cache to free up memory
-                    if i % 10 == 0:  # adjust the frequency as needed
-                        torch.cuda.empty_cache()
-                except Exception as e:
-                    print(e)
-                with autocast():
-                    # predict the noise residual in FP16
-                    noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample.to(dtype=latents_dtype)
-
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
